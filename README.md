@@ -11,6 +11,8 @@ synteettisestä datasta.
 
 - "*Synthetic data is data that has been generated using a purposebuilt mathematical model or algorithm, with the aim of solving a (set of) data science task(s)*", Jordon et al. (2022)
 
+[iteraatiokuva](./images/synthetic_data_iteration.png)
+
 Määritelmän mukaan synteettinen data on siis dataa joka on on generoitu tarkoituksenmukaisesti ratkomaan datatieteiden ongelmia sitä varten rakennetulla mallilla.
 Se ei rajaa pois erilaisia datatyyppejä, ja synteettinen data voi siis olla taulukkomuotoisen datan lisäksi
 tekstiä, kuvaa, videota, ääntä, signaalia jne., tai vaikka näiden sekoitusta.
@@ -83,3 +85,8 @@ Täytyy siis olla jollain osin varma kuinka sensitiivistä informaatiota
 on vuotanut synteettiseen dataan.
 
 
+### References
+
+Synthcity: facilitating innovative use cases of synthetic data in different data modalities, https://doi.org/10.48550/arxiv.2301.07573
+
+Synthetic Data Vault (SDV), https://docs.sdv.dev/sdv

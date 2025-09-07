@@ -29,13 +29,14 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.linear_model import LinearRegression
 
 from sklearn.metrics import mean_squared_error
+from sklearn.metrics import root_mean_squared_error
+from sklearn.metrics import mean_absolute_error
 from sklearn.metrics import r2_score
 from sklearn.metrics import f1_score
 from scipy import stats
 
-from sklearn.preprocessing import StandardScaler
+from sklearn.preprocessing import StandardScaler, MinMaxScaler
 
-from scipy.stats import entropy
 from sklearn.neighbors import NearestNeighbors
 
 
@@ -505,64 +506,6 @@ def utility_test(synth_data, real_data, test_data):
     return numerical_metric_df, categorical_metric_df
         
 
-def compute_scores(
-         X_gt, X_syn, emb: str = ""
-    ):
-        """Compare Wasserstein distance between original data and synthetic data.
-
-        Args:
-            orig_data: original data
-            synth_data: synthetically generated data
-
-        Returns:
-            WD_value: Wasserstein distance
-        """
-        X_gt_ = X_gt.to_numpy().reshape(len(X_gt), -1)
-        X_syn_ = X_syn.to_numpy().reshape(len(X_syn), -1)
-
-        # Entropy computation
-        def compute_entropy(labels: np.ndarray) -> np.ndarray:
-            value, counts = np.unique(np.round(labels), return_counts=True)
-            return entropy(counts)
-
-        # Parameters
-        no, x_dim = X_gt_.shape
-
-        # Weights
-        W = np.zeros(
-            [
-                x_dim,
-            ]
-        )
-
-        for i in range(x_dim):
-            W[i] = compute_entropy(X_gt_[:, i])
-
-        # Normalization
-        X_hat = X_gt_
-        X_syn_hat = X_syn_
-
-        eps = 1e-16
-        W = np.ones_like(W)
-
-        for i in range(x_dim):
-            X_hat[:, i] = X_gt_[:, i] * 1.0 / (W[i] + eps)
-            X_syn_hat[:, i] = X_syn_[:, i] * 1.0 / (W[i] + eps)
-
-        # r_i computation
-        nbrs = NearestNeighbors(n_neighbors=2).fit(X_hat)
-        distance, _ = nbrs.kneighbors(X_hat)
-
-        # hat{r_i} computation
-        nbrs_hat = NearestNeighbors(n_neighbors=1).fit(X_syn_hat)
-        distance_hat, _ = nbrs_hat.kneighbors(X_hat)
-
-        # See which one is bigger
-        R_Diff = distance_hat[:, 0] - distance[:, 1]
-        identifiability_value = np.sum(R_Diff < 0) / float(no)
-
-        return {f"score{emb}": identifiability_value}
-
 
 def distance_score(train, test, synth):
     nbrs_train = NearestNeighbors(n_neighbors=2).fit(train)
@@ -589,3 +532,182 @@ def naive_attack(train, test, synth):
 
     clf.fit(X_train, y_train)
     return np.sum(clf.predict(synth))/synth.shape[0]
+
+
+def nearest_neighbor_distance_ratio(real_df_train_list, real_df_test_list, synthetic_df_list):
+    test_mean_2close_ratio_list = []
+    synth_mean_2close_ratio_list = []
+    test_std_2close_ratio_list = []
+    synth_std_2close_ratio_list = []
+
+    test_max_2close_ratio_list = []
+    synth_max_2close_ratio_list = []
+    test_min_2close_ratio_list = []
+    synth_min_2close_ratio_list = []
+
+    ratios_test = []
+    ratios_synth = []
+
+    for i in range(0,len(real_df_train_list)):
+        scaler_minmax = MinMaxScaler()
+        if 'ID' in real_df_train_list[i].columns:
+            real_df_train_list[i] = real_df_train_list[i].drop('ID', axis=1)
+            real_df_test_list[i] =real_df_test_list[i].drop('ID', axis=1)
+        real_df_train_scaled = scaler_minmax.fit_transform(real_df_train_list[i])
+        real_df_test_scaled = scaler_minmax.transform(real_df_test_list[i])
+        synth_scaled = scaler_minmax.transform(synthetic_df_list[i])
+
+        two_closest_ratio_list_real = []
+        for test_dude in real_df_test_scaled:
+            test_dude_distances = []
+            for real_dude in real_df_train_scaled:
+                test_dude_distances.append(np.linalg.norm(real_dude-test_dude))
+            test_dude_distances_sorted = np.sort(np.array(test_dude_distances))
+            two_closest_ratio_list_real.append(test_dude_distances_sorted[0]/test_dude_distances_sorted[1])
+
+        test_mean_2close_ratio_list.append(np.mean(two_closest_ratio_list_real))
+        test_std_2close_ratio_list.append(np.std(two_closest_ratio_list_real))
+        test_max_2close_ratio_list.append(np.max(two_closest_ratio_list_real))
+        test_min_2close_ratio_list.append(np.min(two_closest_ratio_list_real))
+
+        ratios_test.append(two_closest_ratio_list_real)
+
+        two_closest_ratio_list_synth = []
+        for synth_dude in synth_scaled:
+            synth_dude_distances = []
+            for real_dude in real_df_train_scaled:
+                synth_dude_distances.append(np.linalg.norm(real_dude-synth_dude))
+            synth_dude_distances_sorted = np.sort(np.array(synth_dude_distances))
+            two_closest_ratio_list_synth.append(synth_dude_distances_sorted[0]/synth_dude_distances_sorted[1])
+
+        synth_mean_2close_ratio_list.append(np.mean(two_closest_ratio_list_synth))
+        synth_std_2close_ratio_list.append(np.std(two_closest_ratio_list_synth))
+        synth_max_2close_ratio_list.append(np.max(two_closest_ratio_list_synth))
+        synth_min_2close_ratio_list.append(np.min(two_closest_ratio_list_synth))
+
+        ratios_synth.append(two_closest_ratio_list_synth)
+
+    return ratios_synth, ratios_test
+    
+
+def membership_attack(synth_data, real_data, test_data):
+    synth, train_real, test_real, scaler = scale_numerical(synth_data, real_data, test_data)
+    # numerical_columns, categorical_columns = utils.get_col_types(real_data)
+    cols = synth_data.columns
+
+    rmse_list_s_REG = []
+    rmse_list_r_REG = []
+    rmse_list_s_GB = []
+    rmse_list_r_GB = []
+
+    mae_list_s_REG = []
+    mae_list_r_REG = []
+    mae_list_s_GB = []
+    mae_list_r_GB = []
+
+    rmse_list_test_test_GB = []
+    rmse_list_train_test_GB = []
+    rmse_list_test_test_REG = []
+    rmse_list_train_test_REG = []
+
+    grad_boost_synth_predicts_train_test_list = []
+    grad_boost_synth_predicts_test_test_list =[]
+    grad_boost_synth_true_train_test_list = []
+    grad_boost_synth_true_test_test_list =[]
+
+    for i, y_column in enumerate(cols):
+
+        y_train_real = train_real[y_column]
+        X_train_real = train_real.copy().drop(y_column, axis=1)
+        y_train_synth = synth[y_column]
+        X_train_synth = synth.copy().drop(y_column, axis=1)
+
+        # else:
+        grad_boost_synth = GradientBoostingRegressor()
+        grad_boost_synth.fit(X_train_synth, y_train_synth)
+
+        reg_synth = LinearRegression()
+        reg_synth.fit(X_train_synth, y_train_synth)
+        train_test_i = np.random.randint(0, train_real.shape[0], 30)
+        test_test_i = np.random.randint(0, test_real.shape[0], 30)
+        train_test = train_real.iloc[train_test_i]
+        test_test = test_real.iloc[test_test_i]
+
+        grad_boost_synth_predicts_real = grad_boost_synth.predict(train_real.drop(y_column, axis=1).drop(train_test_i))
+        grad_boost_synth_predicts_test = grad_boost_synth.predict(test_real.drop(y_column, axis=1).drop(test_test_i))
+
+        grad_boost_synth_predicts_train_test = grad_boost_synth.predict(train_test.drop(y_column, axis=1))
+        grad_boost_synth_predicts_test_test = grad_boost_synth.predict(test_test.drop(y_column, axis=1))
+
+        grad_boost_synth_predicts_train_test_list.append(grad_boost_synth_predicts_train_test)
+        grad_boost_synth_predicts_test_test_list.append(grad_boost_synth_predicts_test_test)
+
+        grad_boost_synth_true_train_test_list.append(train_real.iloc[train_test_i][y_column])
+        grad_boost_synth_true_test_test_list.append(test_real.iloc[test_test_i][y_column])
+
+        rmse_s_GB = root_mean_squared_error(train_real[y_column].drop(train_test_i), grad_boost_synth_predicts_real)
+        rmse_r_GB = root_mean_squared_error(test_real[y_column].drop(test_test_i), grad_boost_synth_predicts_test)
+
+        mae_s_GB = mean_absolute_error(train_real[y_column].drop(train_test_i), grad_boost_synth_predicts_real)
+        mae_r_GB = mean_absolute_error(test_real[y_column].drop(test_test_i), grad_boost_synth_predicts_test)
+
+        train_test_rsme_gb =root_mean_squared_error(train_test[y_column], grad_boost_synth_predicts_train_test)
+        test_test_rsme_gb =root_mean_squared_error(test_test[y_column], grad_boost_synth_predicts_test_test)
+
+
+        reg_synth_predicts_real = reg_synth.predict(train_real.drop(y_column, axis=1).drop(train_test_i))
+        reg_synth_predicts_test = reg_synth.predict(test_real.drop(y_column, axis=1).drop(test_test_i))
+
+        reg_synth_predicts_train_test = reg_synth.predict(train_test.drop(y_column, axis=1))
+        reg_synth_predicts_test_test = reg_synth.predict(test_test.drop(y_column, axis=1))
+
+        rmse_s_reg = root_mean_squared_error(train_real[y_column].drop(train_test_i), reg_synth_predicts_real)
+        rmse_r_reg = root_mean_squared_error(test_real[y_column].drop(test_test_i), reg_synth_predicts_test)
+
+        mae_s_reg = mean_absolute_error(train_real[y_column].drop(train_test_i), reg_synth_predicts_real)
+        mae_r_reg = mean_absolute_error(test_real[y_column].drop(test_test_i), reg_synth_predicts_test)
+
+        train_test_rsme_reg =root_mean_squared_error(train_test[y_column], reg_synth_predicts_train_test)
+        test_test_rsme_reg =root_mean_squared_error(test_test[y_column], reg_synth_predicts_test_test)
+
+        rmse_list_s_REG.append(rmse_s_reg)
+        rmse_list_r_REG.append(rmse_r_reg)
+        rmse_list_r_GB.append(rmse_r_GB)
+        rmse_list_s_GB.append(rmse_s_GB)
+        
+        mae_list_s_REG.append(mae_s_reg)
+        mae_list_r_REG.append(mae_r_reg)
+        mae_list_r_GB.append(mae_r_GB)
+        mae_list_s_GB.append(mae_s_GB)
+
+        rmse_list_train_test_GB.append(train_test_rsme_gb)
+        rmse_list_test_test_GB.append(test_test_rsme_gb)
+
+        rmse_list_train_test_REG.append(train_test_rsme_reg)
+        rmse_list_test_test_REG.append(test_test_rsme_reg)
+
+    mse_trtr = np.array([rmse_list_r_GB, rmse_list_r_REG])
+    mse_tstr = np.array([rmse_list_s_GB, rmse_list_s_REG])
+
+    mae_trtr = np.array([mae_list_r_GB, mae_list_r_REG])
+    mae_tstr = np.array([mae_list_s_GB, mae_list_s_REG])
+
+    rmse_train_test = np.array([rmse_list_train_test_GB,rmse_list_train_test_REG])
+    rmse_test_test = np.array([rmse_list_test_test_GB,rmse_list_test_test_REG])
+
+    mse_trtr = pd.DataFrame(mse_trtr, columns=cols, index=['GradBoost', 'Regress'])
+    mse_tstr = pd.DataFrame(mse_tstr, columns=cols, index=['GradBoost', 'Regress'])
+
+    rmse_train_test = pd.DataFrame(rmse_train_test, columns=cols, index=['GradBoost', 'Regress'])
+    rmse_test_test = pd.DataFrame(rmse_test_test, columns=cols, index=['GradBoost', 'Regress'])
+
+    mae_trtr = pd.DataFrame(mae_trtr, columns=cols, index=['GradBoost', 'Regress'])
+    mae_tstr = pd.DataFrame(mae_tstr, columns=cols, index=['GradBoost', 'Regress'])
+
+    grad_boost_synth_predicts_train_test_list
+
+    attacks = pd.concat([rmse_train_test, rmse_test_test], keys=["rmse_train_test","rmse_test_test"])
+    numerical_metric_df = pd.concat([mse_trtr, mse_tstr], keys=["rmsetrtr","rmsetstr"])
+
+
+    return grad_boost_synth_predicts_train_test_list, grad_boost_synth_predicts_test_test_list ,grad_boost_synth_true_train_test_list, grad_boost_synth_true_test_test_list

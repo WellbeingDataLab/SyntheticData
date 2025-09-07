@@ -6,12 +6,15 @@ Jollain matemaattisella mallilla pyritään estimoimaan opetusdatasta mikä
 on koko populaation todellinen jakauma, ja poimimaan tästä
 jakaumasta uusia näytteitä.
 
-Tämä on sisimmiltään sama idea kuin normaalijakauman sovittaminen dataan.
+Tämä on sisimmiltään sama idea kuin sovitattaessa dataan:
 Datasta lasketaan keskiarvo $\mu$ ja varianssi $\sigma^2$,
 ja näiden määrittämä normaalijakauma on estimaatti populaation
 todellisesta jakaumasta.
 Nyt voitaisiin poimia lisää arvoja tästä jakaumasta, joiden
 jakauma noudattaisi läheisesti laskettua jakaumaa.
+
+![jakauma](../images/jakauma.png)
+
 
 Tämä mekanismi on taustalla kaikissa tässä tutoriaalissa
 esitellyissä menetelmissä.
