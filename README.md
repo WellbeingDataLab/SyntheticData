@@ -7,11 +7,13 @@ eli validoinnista.
 Näiden ohjeistukset ja koodit ovat omissa kansioissaan, ja tässä dokumentissa on yleisinformaatiota
 synteettisestä datasta.
 
+![iteraatiokuva](./images/synthetic_data_iteration.png)
+
 ## Mitä on synteettinen data?
 
 - "*Synthetic data is data that has been generated using a purposebuilt mathematical model or algorithm, with the aim of solving a (set of) data science task(s)*", Jordon et al. (2022)
 
-![iteraatiokuva](./images/synthetic_data_iteration.png)
+
 
 Määritelmän mukaan synteettinen data on siis dataa joka on on generoitu tarkoituksenmukaisesti ratkomaan datatieteiden ongelmia sitä varten rakennetulla mallilla.
 Se ei rajaa pois erilaisia datatyyppejä, ja synteettinen data voi siis olla taulukkomuotoisen datan lisäksi
